@@ -1,43 +1,44 @@
-FROM alpine:3.9
-LABEL Maintainer="Tim de Pater <code@trafex.nl>" \
-      Description="Lightweight container with Nginx 1.14 & PHP-FPM 7.2 based on Alpine Linux."
+FROM phusion/baseimage:0.11
 
-# Install packages
-RUN apk --no-cache add php7 php7-fpm php7-mysqli php7-json php7-openssl php7-curl \
-    php7-zlib php7-xml php7-phar php7-intl php7-dom php7-xmlreader php7-ctype \
-    php7-mbstring php7-gd nginx supervisor curl
+MAINTAINER Adib Adipraditya "adhinepraditya@gmail.com"
 
-# Configure nginx
-COPY config/nginx.conf /etc/nginx/nginx.conf
+ENV DEBIAN_FRONTEND noninteractive
+CMD ["/sbin/my_init"]
 
-# Configure PHP-FPM
-COPY config/fpm-pool.conf /etc/php7/php-fpm.d/www.conf
-COPY config/php.ini /etc/php7/conf.d/zzz_custom.ini
+# Install nginx
+RUN apt-get update && apt-get install -y nginx zip unzip
 
-# Configure supervisord
-COPY config/supervisord.conf /etc/supervisor/conf.d/supervisord.conf
+# Install php 7.3
+RUN apt-get install -y software-properties-common
+RUN add-apt-repository -y ppa:ondrej/php
+RUN apt-get update
+RUN apt-get install -y php7.3-fpm php7.3-cli php7.3-mysql php7.3-gd php7.3-imagick php7.3-recode php7.3-tidy php7.3-xmlrpc php7.3-common php7.3-curl php7.3-mbstring php7.3-xml php7.3-bcmath php7.3-bz2 php7.3-intl php7.3-json php7.3-readline php7.3-zip
 
-# Make sure files/folders needed by the processes are accessable when they run under the nobody user
-RUN chown -R nobody.nobody /run && \
-  chown -R nobody.nobody /var/lib/nginx && \
-  chown -R nobody.nobody /var/tmp/nginx && \
-  chown -R nobody.nobody /var/log/nginx
+RUN mkdir -p /var/www/src
+RUN chown -R $(whoami):$(whoami) /var/www/src/
+RUN chmod -R 755 /var/www
 
-# Setup document root
-RUN mkdir -p /var/www/html
+# Install composer
+RUN curl -sS https://getcomposer.org/installer | php -- --install-dir=/usr/local/bin --filename=composer
 
-# Switch to use a non-root user from here on
-USER nobody
+# Add nginx and php config
+ADD default /etc/nginx/sites-available/default
+ADD php.ini /etc/php/7.3/fpm/php.ini
 
-# Add application
-WORKDIR /var/www/html
-COPY --chown=nobody src/ /var/www/html/
+# Install supervisor
+RUN apt-get -y install supervisor
+RUN mkdir -p /var/log/supervisor
 
-# Expose the port nginx is reachable on
+# Supervisor conf
+ADD supervisord.conf /etc/supervisor/conf.d/supervisord.conf
+
+WORKDIR /var/www/src/
+
+# Create socker
+RUN mkdir -p /run/php
+
+# Ports: nginx
 EXPOSE 8080
+#443
 
-# Let supervisord start nginx & php-fpm
-CMD ["/usr/bin/supervisord", "-c", "/etc/supervisor/conf.d/supervisord.conf"]
-
-# Configure a healthcheck to validate that everything is up&running
-HEALTHCHECK --timeout=10s CMD curl --silent --fail http://127.0.0.1:8080/fpm-ping
+CMD ["/usr/bin/supervisord"]

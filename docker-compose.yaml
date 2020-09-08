@@ -1,0 +1,10 @@
+version: '3.0'
+services:
+  web:
+    image: adibpraditya/nginx-adib:1.0.1
+    volumes:
+     - .:/var/www/src/
+    working_dir: /var/www/src/
+    hostname: web
+    ports:
+     - 8002:80
